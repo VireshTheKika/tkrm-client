@@ -346,6 +346,7 @@ export default function EmployeePanel() {
 
   return (
     <div className="max-w-7xl mx-auto mt-8 px-4">
+      <h2 className="text-3xl my-5 font-bold">Employee panel</h2>
       {/* Summary Section */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-gray-900 text-white p-4 rounded-lg text-center">
