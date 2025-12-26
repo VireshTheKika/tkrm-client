@@ -372,7 +372,7 @@ export default function EmployeePanel() {
           <h3 className="text-lg font-semibold mb-3 text-gray-800">
             Pending / Ongoing Tasks
           </h3>
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[520px] overflow-y-auto">
             {ongoingTasks.length ? (
               ongoingTasks.map((task) => (
                 <TaskCard
@@ -395,7 +395,7 @@ export default function EmployeePanel() {
           <h3 className="text-lg font-semibold mb-3 text-gray-800">
             Completed Tasks
           </h3>
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[520px] overflow-y-auto">
             {completedTasks.length ? (
               completedTasks.map((task) => (
                 <TaskCard
@@ -425,7 +425,7 @@ export default function EmployeePanel() {
 
           {/* Selected Date Tasks */}
           {selectedDate && (
-            <div className="mt-6">
+            <div className="mt-6 max-h-[150px] overflow-y-auto">
               <h3 className="text-lg font-semibold mb-3 text-gray-800">
                 Tasks for {selectedDate.toLocaleDateString()}
               </h3>

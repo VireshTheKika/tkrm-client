@@ -288,7 +288,7 @@ export default function ManagerPanel() {
                       )}
 
                       <p className="text-xs text-gray-500">
-                        Created At:{" "}
+                        Created at:{" "}
                         <b>
                           {new Date(task.createdAt).toLocaleString("en-IN", {
                             day: "numeric",
@@ -298,6 +298,26 @@ export default function ManagerPanel() {
                             minute: "2-digit",
                           })}
                         </b>
+                      </p>
+
+                      <p className="text-xs text-gray-500">
+                        {task.updatedAt !== task.createdAt && (
+                          <p className="text-xs text-gray-500">
+                            Completed at:{" "}
+                            <b>
+                              {new Date(task.updatedAt).toLocaleString(
+                                "en-IN",
+                                {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )}
+                            </b>
+                          </p>
+                        )}
                       </p>
                     </div>
 
