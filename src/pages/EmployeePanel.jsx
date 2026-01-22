@@ -21,75 +21,20 @@ const timeAgo = (date) => {
   return "just now";
 };
 
-const TaskCard = React.memo(function TaskCard({
-  task,
-  updateStatus,
-  addNote,
-  noteValue,
-  onNoteChange,
-}) {
-  return (
-    <div className="bg-white border border-gray-300 rounded-lg p-4 shadow-sm hover:shadow-md transition">
-      <div className="flex justify-between items-center">
-        <h3 className="font-semibold text-lg">{task.title}</h3>
-        <span
-          className={`text-xs px-2 py-1 rounded-full ${
-            task.status === "Completed"
-              ? "bg-green-100 text-green-700"
-              : "bg-yellow-100 text-yellow-700"
-          }`}
-        >
-          {task.status}
-        </span>
-      </div>
+// Utility: Format duration in a readable way
+const formatDuration = (seconds) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
 
-      <p className="text-gray-600 text-sm mt-1">{task.description}</p>
-
-      <p className="text-xs text-gray-400 mt-1">
-        Assigned {timeAgo(task.createdAt)}
-      </p>
-
-      <button
-        onClick={() => updateStatus(task._id, task.status)}
-        className="mt-3 px-3 py-1 bg-gray-900 text-white text-xs rounded-md hover:bg-gray-800"
-      >
-        {task.status === "Completed" ? "Mark Ongoing" : "Mark Completed"}
-      </button>
-
-      <div className="mt-3">
-        <h4 className="text-sm font-semibold">Notes</h4>
-
-        <div className="max-h-20 overflow-y-auto mt-1">
-          {task.notes?.length ? (
-            task.notes.map((note, index) => (
-              <p key={index} className="text-gray-700 text-xs border-b py-1">
-                • {note.message}
-              </p>
-            ))
-          ) : (
-            <p className="text-gray-400 text-xs">No notes yet.</p>
-          )}
-        </div>
-
-        <div className="flex gap-2 mt-2">
-          <input
-            type="text"
-            placeholder="Add a note..."
-            value={noteValue}
-            onChange={(e) => onNoteChange(task._id, e.target.value)}
-            className="w-full text-xs border px-2 py-1 rounded-md"
-          />
-          <button
-            onClick={() => addNote(task._id)}
-            className="px-3 py-1 bg-blue-600 text-white text-xs rounded-md"
-          >
-            Add
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-});
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  } else {
+    return `${secs}s`;
+  }
+};
 
 const Calendar = ({ tasks, onDateSelect, selectedDate }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -245,13 +190,204 @@ const Calendar = ({ tasks, onDateSelect, selectedDate }) => {
   );
 };
 
+const TaskCard = React.memo(function TaskCard({
+  task,
+  addNote,
+  noteValue,
+  onNoteChange,
+  startTask,
+  pauseTask,
+  completeTask,
+  reopenTask,
+  currentTime,
+}) {
+  // ✅ FIXED: Calculate live time correctly accounting for pauses
+  const getLiveTimeSpent = () => {
+    if (!task.startTime) return "Not started";
+
+    const start = new Date(task.startTime);
+    let totalSeconds = 0;
+
+    if (task.status === "Completed" && task.endTime) {
+      // For completed tasks: total time = (end - start) - pausedDuration
+      const end = new Date(task.endTime);
+      totalSeconds =
+        Math.floor((end - start) / 1000) - (task.pausedDuration || 0);
+    } else if (task.status === "Paused" && task.pausedAt) {
+      // For paused tasks: FROZEN at pause time, minus all previous pauses
+      // ✅ KEY FIX: Use pausedAt from backend, NOT currentTime
+      const pausedAt = new Date(task.pausedAt);
+      totalSeconds =
+        Math.floor((pausedAt - start) / 1000) - (task.pausedDuration || 0);
+    } else if (task.status === "Ongoing") {
+      // For ongoing tasks: current time - start time - all paused duration
+      totalSeconds =
+        Math.floor((currentTime - start) / 1000) - (task.pausedDuration || 0);
+    } else {
+      return "Not started";
+    }
+
+    return formatDuration(Math.max(0, totalSeconds));
+  };
+
+  return (
+    <div className="bg-white border border-gray-300 rounded-lg p-4 shadow-sm hover:shadow-md transition">
+      <div className="flex justify-between items-center">
+        <h3 className="font-semibold text-lg">{task.title}</h3>
+        <span
+          className={`text-xs px-2 py-1 rounded-full ${
+            task.status === "Completed"
+              ? "bg-green-100 text-green-700"
+              : task.status === "Paused"
+                ? "bg-orange-100 text-orange-700"
+                : task.status === "Ongoing"
+                  ? "bg-blue-100 text-blue-700"
+                  : "bg-yellow-100 text-yellow-700"
+          }`}
+        >
+          {task.status}
+        </span>
+      </div>
+
+      <p className="text-gray-600 text-sm mt-1">{task.description}</p>
+
+      <p className="text-xs text-gray-400 mt-1">
+        Assigned{" "}
+        {new Date(task.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        })}
+      </p>
+
+      {/* Time Spent Display */}
+      {task.startTime && (
+        <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-700">
+              ⏱️ Time Spent:
+            </span>
+            <span
+              className={`text-sm font-bold ${
+                task.status === "Ongoing"
+                  ? "text-blue-600"
+                  : task.status === "Paused"
+                    ? "text-orange-600"
+                    : "text-green-600"
+              }`}
+            >
+              {getLiveTimeSpent()}
+            </span>
+          </div>
+          {task.status === "Ongoing" && (
+            <p className="text-xs text-blue-500 mt-1">🔴 Running...</p>
+          )}
+          {task.status === "Paused" && (
+            <p className="text-xs text-orange-500 mt-1">⏸️ Paused</p>
+          )}
+        </div>
+      )}
+
+      {task.status === "Completed" && task.updatedAt && (
+        <p className="text-xs text-gray-400 mt-1">
+          Completed {timeAgo(task.updatedAt)}
+        </p>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex gap-2 mt-3 flex-wrap">
+        {(task.status === "Pending" || !task.startTime) && (
+          <button
+            onClick={() => startTask(task._id)}
+            className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+          >
+            ▶ Start
+          </button>
+        )}
+
+        {(task.status === "Ongoing" || task.status === "Paused") &&
+          task.startTime && (
+            <button
+              onClick={() => pauseTask(task._id)}
+              className="px-3 py-1 bg-yellow-500 text-white text-xs rounded hover:bg-yellow-600"
+            >
+              {task.status === "Paused" ? "▶ Resume" : "⏸ Pause"}
+            </button>
+          )}
+
+        {task.status !== "Completed" && (
+          <button
+            onClick={() => completeTask(task._id)}
+            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+          >
+            Complete
+          </button>
+        )}
+
+        {task.status === "Completed" && (
+          <button
+            onClick={() => reopenTask(task._id)}
+            className="px-3 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700"
+          >
+            Reopen
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3">
+        <h4 className="text-sm font-semibold">Notes</h4>
+
+        <div className="max-h-20 overflow-y-auto mt-1">
+          {task.notes?.length ? (
+            task.notes.map((note, index) => (
+              <p key={index} className="text-gray-700 text-xs border-b py-1">
+                • {note.message}
+              </p>
+            ))
+          ) : (
+            <p className="text-gray-400 text-xs">No notes yet.</p>
+          )}
+        </div>
+
+        <div className="flex gap-2 mt-2">
+          <input
+            type="text"
+            placeholder="Add a note..."
+            value={noteValue}
+            onChange={(e) => onNoteChange(task._id, e.target.value)}
+            className="w-full text-xs border px-2 py-1 rounded-md"
+          />
+          <button
+            onClick={() => addNote(task._id)}
+            className="px-3 py-1 bg-blue-600 text-white text-xs rounded-md"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export default function EmployeePanel() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [noteInputs, setNoteInputs] = useState({});
   const [selectedDate, setSelectedDate] = useState(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  const token = JSON.parse(sessionStorage.getItem("userInfo"))?.token;
+  const token = JSON.parse(sessionStorage.getItem("userInfo") || "{}")?.token;
+
+  // Update current time every second for live timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchTasks = async () => {
     try {
@@ -264,6 +400,91 @@ export default function EmployeePanel() {
       console.error("Error fetching tasks:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const startTask = async (taskId) => {
+    try {
+      const { data } = await axios.patch(
+        `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}/start`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? data : t)));
+    } catch (err) {
+      console.error("Error starting task:", err);
+      alert("Error: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const pauseTask = async (taskId) => {
+    try {
+      const { data } = await axios.patch(
+        `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}/pause`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? data : t)));
+    } catch (err) {
+      console.error("Error pausing task:", err);
+      alert("Error: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const completeTask = async (taskId) => {
+    try {
+      const { data } = await axios.patch(
+        `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}/complete`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? data : t)));
+    } catch (err) {
+      console.error("Error completing task:", err);
+      alert("Error: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const reopenTask = async (taskId) => {
+    try {
+      const { data } = await axios.patch(
+        `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}`,
+        { status: "Ongoing", endTime: null },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? data : t)));
+    } catch (err) {
+      console.error("Error reopening task:", err);
+      alert("Error: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleNoteChange = (taskId, value) => {
+    setNoteInputs((prev) => ({ ...prev, [taskId]: value }));
+  };
+
+  const addNote = async (taskId) => {
+    const note = noteInputs[taskId];
+    if (!note?.trim()) return;
+
+    try {
+      const { data } = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}/notes`,
+        { message: note },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      setTasks((prev) =>
+        prev.map((t) => (t._id === taskId ? { ...t, notes: data.notes } : t)),
+      );
+
+      setNoteInputs((prev) => ({ ...prev, [taskId]: "" }));
+    } catch (err) {
+      console.error("Error adding note:", err);
     }
   };
 
@@ -300,62 +521,30 @@ export default function EmployeePanel() {
     return taskDate === today;
   });
 
-  console.log("completed tasks are", completedTasks);
-  console.log("todatstasks are", todaysTasks);
   // Summary
   const totalTasks = tasks.length;
   const completedCount = completedTasks.length;
   const pendingCount = ongoingTasks.length;
 
-  const updateStatus = async (taskId, currentStatus) => {
-    try {
-      const newStatus = currentStatus === "Completed" ? "Ongoing" : "Completed";
-
-      await axios.put(
-        `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}`,
-        { status: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-
-      setTasks((prev) =>
-        prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t)),
-      );
-    } catch (err) {
-      console.error("Error updating status:", err);
+  // ✅ FIXED: Calculate total time spent today (excluding pause time)
+  const totalTimeSpentToday = todaysTasks.reduce((total, task) => {
+    if (task.startTime && task.endTime) {
+      const start = new Date(task.startTime);
+      const end = new Date(task.endTime);
+      const rawTime = Math.floor((end - start) / 1000);
+      const actualTime = rawTime - (task.pausedDuration || 0);
+      return total + actualTime;
     }
-  };
-
-  const handleNoteChange = (taskId, value) => {
-    setNoteInputs((prev) => ({ ...prev, [taskId]: value }));
-  };
-
-  const addNote = async (taskId) => {
-    const note = noteInputs[taskId];
-    if (!note?.trim()) return;
-
-    try {
-      const { data } = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}/notes`,
-        { message: note },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-
-      setTasks((prev) =>
-        prev.map((t) => (t._id === taskId ? { ...t, notes: data.notes } : t)),
-      );
-
-      setNoteInputs((prev) => ({ ...prev, [taskId]: "" }));
-    } catch (err) {
-      console.error("Error adding note:", err);
-    }
-  };
+    return total;
+  }, 0);
 
   if (loading)
-    return <p className="text-gray-500 text-center mt-10">Loading tasks...</p>;
+    return <p className="text-gray-500 text-center mt-10">Loading tasks....</p>;
 
   return (
     <div className="max-w-7xl mx-auto mt-8 px-4">
-      <h2 className="text-3xl my-5 font-bold">Employee panel</h2>
+      <h2 className="text-3xl my-5 font-bold">Employee Panel</h2>
+
       {/* Summary Section */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-gray-900 text-white p-4 rounded-lg text-center">
@@ -370,13 +559,17 @@ export default function EmployeePanel() {
           <p className="text-sm">Pending</p>
           <h3 className="text-xl font-bold">{pendingCount}</h3>
         </div>
+        {/* <div className="bg-blue-100 text-blue-700 p-4 rounded-lg text-center">
+          <p className="text-sm">Time Today</p>
+          <h3 className="text-xl font-bold">
+            {formatDuration(totalTimeSpentToday)}
+          </h3>
+        </div> */}
       </div>
 
       {/* Three Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT SIDE – CALENDAR */}
-
-        {/* MIDDLE – ONGOING TASKS */}
+        {/* LEFT – ONGOING TASKS */}
         <div>
           <h3 className="text-lg font-semibold mb-3 text-gray-800">
             Pending / Ongoing Tasks
@@ -387,10 +580,14 @@ export default function EmployeePanel() {
                 <TaskCard
                   key={task._id}
                   task={task}
-                  updateStatus={updateStatus}
                   addNote={addNote}
                   noteValue={noteInputs[task._id] || ""}
                   onNoteChange={handleNoteChange}
+                  startTask={startTask}
+                  pauseTask={pauseTask}
+                  completeTask={completeTask}
+                  reopenTask={reopenTask}
+                  currentTime={currentTime}
                 />
               ))
             ) : (
@@ -399,7 +596,7 @@ export default function EmployeePanel() {
           </div>
         </div>
 
-        {/* RIGHT SIDE – COMPLETED TASKS */}
+        {/* MIDDLE – COMPLETED TASKS */}
         <div>
           <h3 className="text-lg font-semibold mb-3 text-gray-800">
             Today's Completed Tasks
@@ -410,10 +607,14 @@ export default function EmployeePanel() {
                 <TaskCard
                   key={task._id}
                   task={task}
-                  updateStatus={updateStatus}
                   addNote={addNote}
                   noteValue={noteInputs[task._id] || ""}
                   onNoteChange={handleNoteChange}
+                  startTask={startTask}
+                  pauseTask={pauseTask}
+                  completeTask={completeTask}
+                  reopenTask={reopenTask}
+                  currentTime={currentTime}
                 />
               ))
             ) : (
@@ -422,6 +623,7 @@ export default function EmployeePanel() {
           </div>
         </div>
 
+        {/* RIGHT – CALENDAR */}
         <div>
           <h3 className="text-lg font-semibold mb-3 text-gray-800">
             Task Calendar
@@ -443,7 +645,6 @@ export default function EmployeePanel() {
                 <p className="text-gray-500 text-sm">No tasks for this date.</p>
               ) : (
                 <div className="space-y-3">
-                  {/* Ongoing Tasks for Selected Date */}
                   {selectedOngoing.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-yellow-700 mb-2">
@@ -463,7 +664,6 @@ export default function EmployeePanel() {
                     </div>
                   )}
 
-                  {/* Completed Tasks for Selected Date */}
                   {selectedCompleted.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-green-700 mb-2">
