@@ -46,20 +46,8 @@ const TaskCard = React.memo(function TaskCard({
       <p className="text-gray-600 text-sm mt-1">{task.description}</p>
 
       <p className="text-xs text-gray-400 mt-1">
-        Assigned{" "}
-        {new Date(task.createdAt).toLocaleString("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        })}
+        Assigned {timeAgo(task.createdAt)}
       </p>
-      {task.status === "Completed" && task.updatedAt && (
-        <p className="text-xs text-gray-400">
-          Completed {timeAgo(task.updatedAt)}
-        </p>
-      )}
 
       <button
         onClick={() => updateStatus(task._id, task.status)}
@@ -363,7 +351,7 @@ export default function EmployeePanel() {
   };
 
   if (loading)
-    return <p className="text-gray-500 text-center mt-10">Loading tasks....</p>;
+    return <p className="text-gray-500 text-center mt-10">Loading tasks...</p>;
 
   return (
     <div className="max-w-7xl mx-auto mt-8 px-4">
