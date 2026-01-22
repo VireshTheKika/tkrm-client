@@ -46,8 +46,20 @@ const TaskCard = React.memo(function TaskCard({
       <p className="text-gray-600 text-sm mt-1">{task.description}</p>
 
       <p className="text-xs text-gray-400 mt-1">
-        Assigned {timeAgo(task.createdAt)}
+        Assigned{" "}
+        {new Date(task.createdAt).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        })}
       </p>
+      {task.status === "Completed" && task.updatedAt && (
+        <p className="text-xs text-gray-400">
+          Completed {timeAgo(task.updatedAt)}
+        </p>
+      )}
 
       <button
         onClick={() => updateStatus(task._id, task.status)}
@@ -124,7 +136,7 @@ const Calendar = ({ tasks, onDateSelect, selectedDate }) => {
     const dateStr = new Date(
       currentMonth.getFullYear(),
       currentMonth.getMonth(),
-      day
+      day,
     ).toDateString();
 
     return tasks.filter((task) => {
@@ -137,13 +149,13 @@ const Calendar = ({ tasks, onDateSelect, selectedDate }) => {
 
   const prevMonth = () => {
     setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1),
     );
   };
 
   const nextMonth = () => {
     setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1),
     );
   };
 
@@ -194,10 +206,10 @@ const Calendar = ({ tasks, onDateSelect, selectedDate }) => {
           const day = index + 1;
           const dayTasks = getTasksForDate(day);
           const hasCompletedTasks = dayTasks.some(
-            (t) => t.status === "Completed"
+            (t) => t.status === "Completed",
           );
           const hasPendingTasks = dayTasks.some(
-            (t) => t.status !== "Completed"
+            (t) => t.status !== "Completed",
           );
 
           return (
@@ -207,7 +219,7 @@ const Calendar = ({ tasks, onDateSelect, selectedDate }) => {
                 const clickedDate = new Date(
                   currentMonth.getFullYear(),
                   currentMonth.getMonth(),
-                  day
+                  day,
                 );
                 onDateSelect(clickedDate);
               }}
@@ -257,7 +269,7 @@ export default function EmployeePanel() {
     try {
       const { data } = await axios.get(
         `${import.meta.env.VITE_API_URL}/api/tasks`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
       setTasks(data);
     } catch (err) {
@@ -283,16 +295,25 @@ export default function EmployeePanel() {
 
   const selectedDateTasks = getTasksForSelectedDate();
   const selectedOngoing = selectedDateTasks.filter(
-    (t) => t.status !== "Completed"
+    (t) => t.status !== "Completed",
   );
   const selectedCompleted = selectedDateTasks.filter(
-    (t) => t.status === "Completed"
+    (t) => t.status === "Completed",
   );
 
   // Split tasks into Ongoing & Completed
   const ongoingTasks = tasks.filter((t) => t.status !== "Completed");
   const completedTasks = tasks.filter((t) => t.status === "Completed");
+  const today = new Date().toLocaleDateString();
 
+  // for single day tasks
+  const todaysTasks = completedTasks.filter((task) => {
+    const taskDate = new Date(task.updatedAt).toLocaleDateString();
+    return taskDate === today;
+  });
+
+  console.log("completed tasks are", completedTasks);
+  console.log("todatstasks are", todaysTasks);
   // Summary
   const totalTasks = tasks.length;
   const completedCount = completedTasks.length;
@@ -305,11 +326,11 @@ export default function EmployeePanel() {
       await axios.put(
         `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}`,
         { status: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
       setTasks((prev) =>
-        prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t))
+        prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t)),
       );
     } catch (err) {
       console.error("Error updating status:", err);
@@ -328,11 +349,11 @@ export default function EmployeePanel() {
       const { data } = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}/notes`,
         { message: note },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
       setTasks((prev) =>
-        prev.map((t) => (t._id === taskId ? { ...t, notes: data.notes } : t))
+        prev.map((t) => (t._id === taskId ? { ...t, notes: data.notes } : t)),
       );
 
       setNoteInputs((prev) => ({ ...prev, [taskId]: "" }));
@@ -393,11 +414,11 @@ export default function EmployeePanel() {
         {/* RIGHT SIDE – COMPLETED TASKS */}
         <div>
           <h3 className="text-lg font-semibold mb-3 text-gray-800">
-            Completed Tasks
+            Today's Completed Tasks
           </h3>
           <div className="space-y-4 max-h-[520px] overflow-y-auto">
-            {completedTasks.length ? (
-              completedTasks.map((task) => (
+            {todaysTasks.length > 0 ? (
+              todaysTasks.map((task) => (
                 <TaskCard
                   key={task._id}
                   task={task}
@@ -408,7 +429,7 @@ export default function EmployeePanel() {
                 />
               ))
             ) : (
-              <p className="text-gray-500 text-sm">No completed tasks yet.</p>
+              <p className="text-gray-500 text-sm">No tasks completed today.</p>
             )}
           </div>
         </div>
