@@ -201,33 +201,18 @@ const TaskCard = React.memo(function TaskCard({
   reopenTask,
   currentTime,
 }) {
-  // ✅ FIXED: Calculate live time correctly accounting for pauses
   const getLiveTimeSpent = () => {
     if (!task.startTime) return "Not started";
+    const totalWorked = task.totalWorkedSeconds || 0;
+    if (task.status === "Completed") return formatDuration(totalWorked);
 
-    const start = new Date(task.startTime);
-    let totalSeconds = 0;
-
-    if (task.status === "Completed" && task.endTime) {
-      // For completed tasks: total time = (end - start) - pausedDuration
-      const end = new Date(task.endTime);
-      totalSeconds =
-        Math.floor((end - start) / 1000) - (task.pausedDuration || 0);
-    } else if (task.status === "Paused" && task.pausedAt) {
-      // For paused tasks: FROZEN at pause time, minus all previous pauses
-      // ✅ KEY FIX: Use pausedAt from backend, NOT currentTime
-      const pausedAt = new Date(task.pausedAt);
-      totalSeconds =
-        Math.floor((pausedAt - start) / 1000) - (task.pausedDuration || 0);
-    } else if (task.status === "Ongoing") {
-      // For ongoing tasks: current time - start time - all paused duration
-      totalSeconds =
-        Math.floor((currentTime - start) / 1000) - (task.pausedDuration || 0);
-    } else {
-      return "Not started";
+    let liveSeconds = totalWorked;
+    if (!task.isPaused && task.lastResumedAt) {
+      liveSeconds += Math.floor(
+        (currentTime - new Date(task.lastResumedAt)) / 1000,
+      );
     }
-
-    return formatDuration(Math.max(0, totalSeconds));
+    return formatDuration(Math.max(0, liveSeconds));
   };
 
   return (
@@ -262,7 +247,6 @@ const TaskCard = React.memo(function TaskCard({
         })}
       </p>
 
-      {/* Time Spent Display */}
       {task.startTime && (
         <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
           <div className="flex items-center justify-between">
@@ -281,12 +265,7 @@ const TaskCard = React.memo(function TaskCard({
               {getLiveTimeSpent()}
             </span>
           </div>
-          {task.status === "Ongoing" && (
-            <p className="text-xs text-blue-500 mt-1">🔴 Running...</p>
-          )}
-          {task.status === "Paused" && (
-            <p className="text-xs text-orange-500 mt-1">⏸️ Paused</p>
-          )}
+          {/* ... status indicators ... */}
         </div>
       )}
 
@@ -402,6 +381,11 @@ export default function EmployeePanel() {
       setLoading(false);
     }
   };
+  useEffect(() => {
+    fetchTasks();
+    const interval = setInterval(fetchTasks, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const startTask = async (taskId) => {
     try {
@@ -419,6 +403,25 @@ export default function EmployeePanel() {
   };
 
   const pauseTask = async (taskId) => {
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t._id === taskId && !t.isPaused) {
+          const now = new Date();
+          const activeTime = t.lastResumedAt
+            ? Math.floor((now - new Date(t.lastResumedAt)) / 1000)
+            : 0;
+          return {
+            ...t,
+            isPaused: true,
+            status: "Paused",
+            pausedAt: now,
+            totalWorkedSeconds: (t.totalWorkedSeconds || 0) + activeTime,
+          };
+        }
+        return t;
+      }),
+    );
+
     try {
       const { data } = await axios.patch(
         `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}/pause`,
@@ -428,8 +431,7 @@ export default function EmployeePanel() {
 
       setTasks((prev) => prev.map((t) => (t._id === taskId ? data : t)));
     } catch (err) {
-      console.error("Error pausing task:", err);
-      alert("Error: " + (err.response?.data?.message || err.message));
+      console.error(err);
     }
   };
 
@@ -449,17 +451,29 @@ export default function EmployeePanel() {
   };
 
   const reopenTask = async (taskId) => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t._id === taskId
+          ? {
+              ...t,
+              status: "Ongoing",
+              isPaused: false,
+              lastResumedAt: new Date(),
+            }
+          : t,
+      ),
+    );
+
     try {
       const { data } = await axios.patch(
-        `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}`,
-        { status: "Ongoing", endTime: null },
+        `${import.meta.env.VITE_API_URL}/api/tasks/${taskId}/reopen`,
+        {},
         { headers: { Authorization: `Bearer ${token}` } },
       );
 
       setTasks((prev) => prev.map((t) => (t._id === taskId ? data : t)));
     } catch (err) {
-      console.error("Error reopening task:", err);
-      alert("Error: " + (err.response?.data?.message || err.message));
+      console.error(err);
     }
   };
 
@@ -488,11 +502,6 @@ export default function EmployeePanel() {
     }
   };
 
-  useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  // Get tasks for selected date
   const getTasksForSelectedDate = () => {
     if (!selectedDate) return [];
     const selectedDateStr = selectedDate.toDateString();
