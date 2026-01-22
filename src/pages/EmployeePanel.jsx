@@ -363,7 +363,7 @@ export default function EmployeePanel() {
   };
 
   if (loading)
-    return <p className="text-gray-500 text-center mt-10">Loading tasks...</p>;
+    return <p className="text-gray-500 text-center mt-10">Loading tasks....</p>;
 
   return (
     <div className="max-w-7xl mx-auto mt-8 px-4">
